@@ -14,9 +14,10 @@ import {
   getSavingsProgress,
 } from '../lib/formulas'
 import { getItemImage, readImageFile } from '../lib/images'
+import { generateAiReview } from '../lib/ai-review'
 import { analyzeProductImage } from '../lib/image-ai'
 import { fetchLinkPreview } from '../lib/link-preview'
-import { hasOpenAiKey, loadSettings } from '../lib/settings'
+import { hasAiKey, hasOpenAiKey } from '../lib/settings'
 import { ItemCover } from './ItemCover'
 
 interface ItemModalProps {
@@ -50,6 +51,8 @@ export function ItemModal({ item, open, onClose, onSave }: ItemModalProps) {
   const [smartError, setSmartError] = useState('')
   const [linkLoading, setLinkLoading] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
+  const [reviewLoading, setReviewLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (item) {
@@ -101,25 +104,49 @@ export function ItemModal({ item, open, onClose, onSave }: ItemModalProps) {
   const set = <K extends keyof ItemInput>(key: K, value: ItemInput[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }))
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const buildInput = (source: ItemInput = form): ItemInput => ({
+    ...source,
+    name: source.name.trim(),
+    link: source.link || undefined,
+    purchaseDate: source.purchaseDate || undefined,
+    aiReview: source.aiReview || undefined,
+    imageUrl: source.imageUrl || undefined,
+    members: membersText
+      .split(/[,，]/)
+      .map((m) => m.trim())
+      .filter(Boolean),
+  })
+
+  const runGenerateReview = async (source: ItemInput): Promise<string | undefined> => {
+    if (!hasAiKey()) return undefined
+    return generateAiReview(buildInput(source))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.name.trim()) return
-    onSave(
-      {
-        ...form,
-        name: form.name.trim(),
-        link: form.link || undefined,
-        purchaseDate: form.purchaseDate || undefined,
-        aiReview: form.aiReview || undefined,
-        imageUrl: form.imageUrl || undefined,
-        members: membersText
-          .split(/[,，]/)
-          .map((m) => m.trim())
-          .filter(Boolean),
-      },
-      item?.id,
-    )
-    onClose()
+
+    setSubmitting(true)
+    setSmartError('')
+    try {
+      let payload = buildInput()
+      if (!payload.aiReview?.trim()) {
+        setReviewLoading(true)
+        try {
+          const review = await runGenerateReview(form)
+          if (review) payload = { ...payload, aiReview: review }
+        } catch (err) {
+          setSmartError(err instanceof Error ? err.message : 'AI 评测生成失败')
+          return
+        } finally {
+          setReviewLoading(false)
+        }
+      }
+      onSave(payload, item?.id)
+      onClose()
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -145,14 +172,24 @@ export function ItemModal({ item, open, onClose, onSave }: ItemModalProps) {
     setSmartError('')
     try {
       const preview = await fetchLinkPreview(form.link)
-      setForm((prev) => ({
-        ...prev,
-        imageUrl: preview.imageUrl ?? prev.imageUrl,
-        name: prev.name.trim() ? prev.name : (preview.title ?? prev.name),
-        aiReview: prev.aiReview?.trim()
-          ? prev.aiReview
-          : (preview.description ?? prev.aiReview),
-      }))
+      const merged: ItemInput = {
+        ...form,
+        imageUrl: preview.imageUrl ?? form.imageUrl,
+        name: form.name.trim() ? form.name : (preview.title ?? form.name),
+      }
+      setForm(merged)
+
+      if (hasAiKey()) {
+        setReviewLoading(true)
+        try {
+          const review = await runGenerateReview(merged)
+          if (review) setForm((prev) => ({ ...prev, aiReview: review }))
+        } catch (err) {
+          setSmartError(err instanceof Error ? err.message : 'AI 评测生成失败')
+        } finally {
+          setReviewLoading(false)
+        }
+      }
     } catch (err) {
       setSmartError(err instanceof Error ? err.message : '链接抓取失败')
     } finally {
@@ -161,9 +198,8 @@ export function ItemModal({ item, open, onClose, onSave }: ItemModalProps) {
   }
 
   const handleAnalyzeImage = async () => {
-    const apiKey = loadSettings().openaiApiKey?.trim()
-    if (!apiKey) {
-      setSmartError('请先在右上角「设置」里配置 OpenAI API Key')
+    if (!hasOpenAiKey()) {
+      setSmartError('AI 识图需在「设置」中配置 OpenAI API Key')
       return
     }
 
@@ -175,18 +211,49 @@ export function ItemModal({ item, open, onClose, onSave }: ItemModalProps) {
     setAiLoading(true)
     setSmartError('')
     try {
-      const result = await analyzeProductImage(imageUrl, apiKey)
+      const result = await analyzeProductImage(imageUrl)
       setForm((prev) => ({
         ...prev,
         name: result.name || prev.name,
         price: result.price ?? prev.price,
         category: result.category ?? prev.category,
-        aiReview: result.aiReview || prev.aiReview,
       }))
+      if (result.aiReview) {
+        setForm((prev) => ({ ...prev, aiReview: result.aiReview }))
+      } else if (hasAiKey()) {
+        const review = await runGenerateReview({
+          ...form,
+          name: result.name || form.name,
+          price: result.price ?? form.price,
+          category: result.category ?? form.category,
+        })
+        if (review) setForm((prev) => ({ ...prev, aiReview: review }))
+      }
     } catch (err) {
       setSmartError(err instanceof Error ? err.message : 'AI 识图失败')
     } finally {
       setAiLoading(false)
+    }
+  }
+
+  const handleGenerateReview = async () => {
+    if (!form.name.trim()) {
+      setSmartError('请先填写商品名称')
+      return
+    }
+    if (!hasAiKey()) {
+      setSmartError('请先在「设置」中配置 DeepSeek 或 OpenAI API Key')
+      return
+    }
+    setReviewLoading(true)
+    setSmartError('')
+    try {
+      const review = await runGenerateReview(form)
+      if (review) set('aiReview', review)
+    } catch (err) {
+      setSmartError(err instanceof Error ? err.message : 'AI 评测生成失败')
+    } finally {
+      setReviewLoading(false)
     }
   }
 
@@ -413,15 +480,32 @@ export function ItemModal({ item, open, onClose, onSave }: ItemModalProps) {
             />
           </label>
 
-          <label className="field">
-            <span>AI 评测</span>
+          <div className="field">
+            <div className="field-head">
+              <span className="field-label">AI 评测</span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={reviewLoading}
+                onClick={handleGenerateReview}
+              >
+                {reviewLoading ? '生成中…' : '重新生成'}
+              </button>
+            </div>
             <textarea
               rows={4}
-              value={form.aiReview}
-              onChange={(e) => set('aiReview', e.target.value)}
-              placeholder="产品评测、购买理由、使用感受…"
+              readOnly
+              value={form.aiReview ?? ''}
+              placeholder={
+                hasAiKey()
+                  ? '保存时自动生成，或点击「重新生成」'
+                  : '请先在设置中配置 API Key，保存时将自动生成'
+              }
             />
-          </label>
+            {!hasAiKey() && (
+              <p className="field-hint">默认使用 DeepSeek 生成 AI 评测</p>
+            )}
+          </div>
 
           <div className="computed-panel">
             <p>
@@ -447,8 +531,8 @@ export function ItemModal({ item, open, onClose, onSave }: ItemModalProps) {
             <button type="button" className="btn btn-ghost" onClick={onClose}>
               取消
             </button>
-            <button type="submit" className="btn btn-primary">
-              {item ? '保存' : '添加'}
+            <button type="submit" className="btn btn-primary" disabled={submitting || reviewLoading}>
+              {submitting ? '保存中…' : item ? '保存' : '添加'}
             </button>
           </div>
         </form>

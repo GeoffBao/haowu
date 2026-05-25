@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { AuthGate } from './components/AuthGate'
 import { EmptyState } from './components/EmptyState'
 import { FilterBar } from './components/FilterBar'
 import { Header } from './components/Header'
@@ -8,6 +9,7 @@ import { SettingsModal } from './components/SettingsModal'
 import { StatsBar } from './components/StatsBar'
 import { ViewTabs } from './components/ViewTabs'
 import { useItems } from './hooks/useItems'
+import { isAuthenticated, logout } from './lib/auth'
 import { countByStatus, filterItems, sortItems } from './lib/utils'
 import type { Item, ItemCategory, ItemInput, ViewFilter } from './types/item'
 
@@ -15,6 +17,7 @@ function App() {
   const { items, ready, addItem, updateItem, deleteItem, exportData, importData } =
     useItems()
 
+  const [authed, setAuthed] = useState(isAuthenticated)
   const [view, setView] = useState<ViewFilter>('all')
   const [category, setCategory] = useState<ItemCategory | 'all'>('all')
   const [query, setQuery] = useState('')
@@ -77,6 +80,15 @@ function App() {
     e.target.value = ''
   }
 
+  const handleLogout = () => {
+    logout()
+    setAuthed(false)
+  }
+
+  if (!authed) {
+    return <AuthGate onSuccess={() => setAuthed(true)} />
+  }
+
   if (!ready) return null
 
   return (
@@ -94,6 +106,7 @@ function App() {
         onExport={handleExport}
         onImport={handleImport}
         onSettings={() => setSettingsOpen(true)}
+        onLogout={handleLogout}
       />
 
       <main className="main">

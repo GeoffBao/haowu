@@ -1,13 +1,14 @@
-import { Download, Plus, Settings, Upload } from 'lucide-react'
+import { Download, LogOut, Plus, Settings, Upload } from 'lucide-react'
 
 interface HeaderProps {
   onAdd: () => void
   onExport: () => void
   onImport: () => void
   onSettings: () => void
+  onLogout: () => void
 }
 
-export function Header({ onAdd, onExport, onImport, onSettings }: HeaderProps) {
+export function Header({ onAdd, onExport, onImport, onSettings, onLogout }: HeaderProps) {
   return (
     <header className="header">
       <div className="header-brand">
@@ -18,9 +19,13 @@ export function Header({ onAdd, onExport, onImport, onSettings }: HeaderProps) {
         </div>
       </div>
       <div className="header-actions">
-        <button type="button" className="btn btn-ghost" onClick={onSettings} title="AI 设置">
+        <button type="button" className="btn btn-ghost" onClick={onSettings} title="设置">
           <Settings size={16} />
           <span className="hide-mobile">设置</span>
+        </button>
+        <button type="button" className="btn btn-ghost" onClick={onLogout} title="退出登录">
+          <LogOut size={16} />
+          <span className="hide-mobile">退出</span>
         </button>
         <button type="button" className="btn btn-ghost" onClick={onImport} title="导入">
           <Upload size={16} />

@@ -480,6 +480,72 @@ textarea {
   color: var(--text);
 }
 
+.auth-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 2rem 1.75rem;
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.auth-card .header-mark {
+  margin: 0 auto 1rem;
+}
+
+.auth-card h1 {
+  font-size: 1.6rem;
+  margin-bottom: 0.35rem;
+}
+
+.auth-card p {
+  color: var(--text-muted);
+  margin: 0 0 1.25rem;
+}
+
+.auth-form {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.auth-submit {
+  width: 100%;
+  justify-content: center;
+  margin-top: 0.25rem;
+}
+
+.settings-section {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.field textarea[readonly] {
+  background: #faf7f2;
+  color: var(--text);
+  cursor: default;
+}
+
 .item-rating {
   display: inline-flex;
   align-items: center;
