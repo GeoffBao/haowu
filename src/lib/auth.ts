@@ -46,7 +46,6 @@ export async function login(username: string, password: string): Promise<boolean
 }
 
 export async function setupAuth(username: string, password: string): Promise<void> {
-  const { saveSettings } = await import('./settings')
   const current = loadSettings()
   saveSettings({
     ...current,
